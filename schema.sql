@@ -27,6 +27,9 @@ CREATE TABLE athletes (
     FOREIGN KEY ( country_code ) REFERENCES countries ( code )
 );
 
+CREATE INDEX idx_athletes_country_code ON athletes ( country_code );
+CREATE INDEX idx_athletes_gender ON athletes ( gender );
+
 -- Команды (для командных видов спорта)
 CREATE TABLE teams (
     id INTEGER PRIMARY KEY,
@@ -39,6 +42,9 @@ CREATE TABLE teams (
     FOREIGN KEY ( country_code ) REFERENCES countries ( code ),
     FOREIGN KEY ( sport_code ) REFERENCES sports ( code )
 );
+
+CREATE INDEX idx_teams_country_code ON teams ( country_code );
+CREATE INDEX idx_teams_sport_code ON teams ( sport_code );
 
 -- Таблица для связи между командами и их участниками
 CREATE TABLE team_members (
@@ -69,6 +75,9 @@ CREATE TABLE competitions (
     FOREIGN KEY ( sport_code ) REFERENCES sports ( code ),
     FOREIGN KEY ( site_id ) REFERENCES sites ( id )
 );
+
+CREATE INDEX idx_competitions_sport_code ON competitions ( sport_code );
+CREATE INDEX idx_competitions_site_id ON competitions ( site_id );
 
 -- Таблица для связи атлетов и соревнований, в которых они участвовали
 CREATE TABLE competition_athletes (
