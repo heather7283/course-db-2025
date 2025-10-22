@@ -102,6 +102,7 @@ CREATE TABLE competition_teams (
     FOREIGN KEY ( team_id ) REFERENCES teams ( id )
 );
 
+-- вьюха которая объединяет индивидуальные и коммандные результаты
 CREATE VIEW competition_results AS
     SELECT
         competition_id,
@@ -118,6 +119,7 @@ CREATE VIEW competition_results AS
     FROM competition_teams
 ;
 
+-- вьюха предоставляющая данные о кол-ве медалей у каждой страны
 CREATE VIEW country_medals AS
     SELECT
         c.name AS country,
@@ -135,6 +137,8 @@ CREATE VIEW country_medals AS
     ORDER BY gold DESC, silver DESC, bronze DESC;
 ;
 
+-- триггер который проверяет чтобы в таблицу с командными результатами
+-- нельзя было пихать индивидуальные виды спорта
 CREATE TRIGGER ensure_individual_sport BEFORE INSERT ON competition_athletes FOR EACH ROW BEGIN
     SELECT
     CASE
@@ -148,6 +152,7 @@ CREATE TRIGGER ensure_individual_sport BEFORE INSERT ON competition_athletes FOR
     END;
 END;
 
+-- то же что и выше но наоборт
 CREATE TRIGGER ensure_team_sport BEFORE INSERT ON competition_teams FOR EACH ROW BEGIN
     SELECT
     CASE
@@ -161,6 +166,7 @@ CREATE TRIGGER ensure_team_sport BEFORE INSERT ON competition_teams FOR EACH ROW
     END;
 END;
 
+-- триггер который не даст добавить атлета в команду чужой страны
 CREATE TRIGGER ensure_team_members_country BEFORE INSERT ON team_members FOR EACH ROW BEGIN
     SELECT
     CASE
