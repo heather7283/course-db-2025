@@ -16,10 +16,6 @@ var font []byte
 
 var currentBackend backend.Backend[glfwbackend.GLFWWindowFlags]
 
-func loop() {
-	imgui.ShowDemoWindow()
-}
-
 func init() {
 	runtime.LockOSThread()
 }
@@ -36,6 +32,6 @@ func main() {
 	})
 
 	currentBackend.CreateWindow("Олимпиада", 1200, 900)
-	currentBackend.Run(loop)
+	currentBackend.Run(RunUI)
 }
 
