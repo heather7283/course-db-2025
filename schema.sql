@@ -1,15 +1,15 @@
 -- Страны
 CREATE TABLE IF NOT EXISTS countries (
-    code CHAR(3) PRIMARY KEY,
+    code TEXT PRIMARY KEY CHECK ( length(code) > 0 ),
 
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE CHECK ( length(name) > 0 )
 );
 
 -- Виды спорта
 CREATE TABLE IF NOT EXISTS sports (
-    code CHAR(3) NOT NULL PRIMARY KEY,
+    code TEXT PRIMARY KEY CHECK ( length(code) > 0 ),
 
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE CHECK ( length(name) > 0 ),
     -- Групповой или нет (по умолчанию нет)
     is_team BOOLEAN NOT NULL DEFAULT FALSE
 );
@@ -18,11 +18,11 @@ CREATE TABLE IF NOT EXISTS sports (
 CREATE TABLE IF NOT EXISTS athletes (
     id INTEGER PRIMARY KEY,
 
-    name TEXT NOT NULL,
+    name TEXT NOT NULL CHECK ( length(name) > 0 ),
     gender CHAR(1) NOT NULL CHECK ( gender IN ( 'F', 'M' ) ),
     birthday TIMESTAMP NOT NULL CHECK ( birthday < CURRENT_TIMESTAMP ),
 
-    country_code CHAR(3) NOT NULL,
+    country_code TEXT NOT NULL,
 
     FOREIGN KEY ( country_code ) REFERENCES countries ( code )
 );
@@ -34,10 +34,10 @@ CREATE INDEX IF NOT EXISTS idx_athletes_gender ON athletes ( gender );
 CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY,
 
-    name TEXT NOT NULL,
+    name TEXT NOT NULL CHECK ( length(name) > 0 ),
 
-    country_code CHAR(3) NOT NULL,
-    sport_code CHAR(3) NOT NULL,
+    country_code TEXT NOT NULL,
+    sport_code TEXT NOT NULL,
 
     FOREIGN KEY ( country_code ) REFERENCES countries ( code ),
     FOREIGN KEY ( sport_code ) REFERENCES sports ( code )
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS team_members (
 CREATE TABLE IF NOT EXISTS sites (
     id INTEGER PRIMARY KEY,
 
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE CHECK ( length(name) > 0 )
 );
 
 -- Проведённые соревнования
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS competitions (
 
     time TIMESTAMP NOT NULL CHECK ( time < CURRENT_TIMESTAMP ),
 
-    sport_code CHAR(3) NOT NULL,
+    sport_code TEXT NOT NULL,
     site_id INTEGER NOT NULL,
 
     FOREIGN KEY ( sport_code ) REFERENCES sports ( code ),
