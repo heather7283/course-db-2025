@@ -10,56 +10,56 @@ import (
 )
 
 type Country struct {
-	Code string `gorm:"primaryKey"`
-	Name string `gorm:"not null"`
+	Code string
+	Name string
 }
 
 type Sport struct {
-	Code string `gorm:"primaryKey"`
-	Name string `gorm:"not null;unique"`
-	IsTeam bool `gorm:"not null;default:0"`
+	Code string
+	Name string
+	IsTeam bool
 }
 
 type Athlete struct {
-	ID uint `gorm:"primaryKey"`
-	Name string `gorm:"not null"`
-	Gender string `gorm:"not null;check:gender in ('F', 'M');index"`
-	Birthday time.Time `gorm:"check:birthday < current_timestamp"`
+	ID uint
+	Name string
+	Gender string
+	Birthday time.Time
 
-	CountryCode string `gorm:"index"`
-	Country Country `gorm:"foreignKey:CountryCode;references:Code"`
+	CountryCode string
+	Country Country
 }
 
 type Team struct {
-	ID uint `gorm:"primaryKey"`
-	Name string `gorm:"not null"`
+	ID uint
+	Name string
 
-	CountryCode string `gorm:"index"`
-	Country Country `gorm:"foreignKey:CountryCode;references:Code"`
+	CountryCode string
+	Country Country
 
-	SportCode string `gorm:"index"`
-	Sport Sport `gorm:"foreignKey:SportCode;references:Code"`
+	SportCode string
+	Sport Sport
 
-	Members []Athlete `gorm:"many2many:team_members;foreignKey:ID;references:ID"`
+	Members []Athlete
 }
 
 type Site struct {
-	ID uint `gorm:"primaryKey"`
-	Name string `gorm:"not null;unique"`
+	ID uint
+	Name string
 }
 
 type Competition struct {
-	ID uint `gorm:"primaryKey"`
-	Time time.Time `gorm:"not null;check:time < current_timestamp"`
+	ID uint
+	Time time.Time
 
-	SportCode string `gorm:"index"`
-	Sport Sport `gorm:"foreignKey:SportCode;references:Code"`
+	SportCode string
+	Sport Sport
 
-	SiteID string `gorm:"index"`
-	Site Site `gorm:"foreignKey:SiteID;references:ID"`
+	SiteID string
+	Site Site
 
-	Athletes []Athlete `gorm:"many2many:competition_athletes;foreignKey:ID;references:ID"`
-	Teams []Team `gorm:"many2many:competition_teams;foreignKey:ID;references:ID"`
+	Athletes []Athlete
+	Teams []Team
 }
 
 //go:embed schema.sql
