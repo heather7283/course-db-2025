@@ -1,9 +1,10 @@
 package main
 
 import (
-	"unsafe"
-	"runtime"
+	"context"
 	_ "embed"
+	"runtime"
+	"unsafe"
 
 	"github.com/AllenDang/cimgui-go/backend"
 	"github.com/AllenDang/cimgui-go/backend/glfwbackend"
@@ -21,6 +22,10 @@ func init() {
 }
 
 func main() {
+	if err := dbOpen(context.Background(), "db.sqlite3"); err != nil {
+		panic(err)
+	}
+
 	currentBackend, _ = backend.CreateBackend(glfwbackend.NewGLFWBackend())
 	currentBackend.SetAfterCreateContextHook(func() {
 		fontDataPtr := uintptr(unsafe.Pointer(&font[0]))
@@ -32,6 +37,8 @@ func main() {
 	})
 
 	currentBackend.CreateWindow("Олимпиада", 1200, 900)
-	currentBackend.Run(RunUI)
+
+	initUI()
+	currentBackend.Run(runUI)
 }
 
