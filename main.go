@@ -1,10 +1,9 @@
 package main
 
 import (
-	"context"
-	_ "embed"
 	"runtime"
 	"unsafe"
+	_ "embed"
 
 	"github.com/AllenDang/cimgui-go/backend"
 	"github.com/AllenDang/cimgui-go/backend/glfwbackend"
@@ -22,7 +21,7 @@ func init() {
 }
 
 func main() {
-	if err := dbOpen(context.Background(), "db.sqlite3"); err != nil {
+	if err := dbOpen("db.sqlite3"); err != nil {
 		panic(err)
 	}
 

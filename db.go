@@ -1,12 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
+	_ "embed"
 
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"database/sql"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Country struct {
@@ -62,106 +62,55 @@ type Competition struct {
 	Teams []Team `gorm:"many2many:competition_teams;foreignKey:ID;references:ID"`
 }
 
-const trigger_ensure_individual_sport = `
-	CREATE TRIGGER IF NOT EXISTS ensure_individual_sport
-	BEFORE INSERT ON competition_athletes FOR EACH ROW BEGIN
-	    SELECT
-	    CASE
-	        WHEN (
-	            SELECT s.is_team
-	            FROM competitions c
-	            JOIN sports s ON c.sport_code = s.code
-	            WHERE c.id = NEW.competition_id
-	        ) = TRUE
-	        THEN RAISE(ABORT, 'Командный спорт — нельзя добавлять одиночного атлета')
-	    END;
-	END;
-`
+//go:embed schema.sql
+var dbSchema string
 
-const trigger_ensure_team_sport = `
-	CREATE TRIGGER IF NOT EXISTS ensure_team_sport
-	BEFORE INSERT ON competition_teams FOR EACH ROW BEGIN
-	    SELECT
-	    CASE
-	        WHEN (
-	            SELECT s.is_team
-	            FROM competitions c
-	            JOIN sports s ON c.sport_code = s.code
-	            WHERE c.id = NEW.competition_id
-	        ) = FALSE
-	        THEN RAISE(ABORT, 'Индивидуальный спорт — нельзя добавлять команду')
-	    END;
-	END;
-`
+var db *sql.DB
 
-const trigger_ensure_team_members_country = `
-	CREATE TRIGGER IF NOT EXISTS ensure_team_members_country
-	BEFORE INSERT ON team_members FOR EACH ROW BEGIN
-	    SELECT
-	    CASE
-	        WHEN (
-	            SELECT a.country_code != t.country_code
-	            FROM athletes a
-	            JOIN teams t ON t.id = NEW.team_id
-	            WHERE a.id = NEW.athlete_id
-	        ) = TRUE
-	        THEN RAISE(ABORT, 'Спортсмен не соответствует команде по стране')
-	    END;
-	END;
-`
+func dbOpen(path string) error {
+	var err error
 
-var dbState struct {
-	db *gorm.DB
-	ctx context.Context
-}
-
-func dbOpen(ctx context.Context, path string) (error) {
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
-	if err != nil {
-		return err
+	if db, err = sql.Open("sqlite3", fmt.Sprintf("file:%s", path)); err != nil {
+		return fmt.Errorf("failed to open database: %s", err)
 	}
 
-	tables := []any{
-		&Country{},
-		&Sport{},
-		&Athlete{},
-		&Team{},
-		&Site{},
-		&Competition{},
-	}
-	if err := db.Migrator().AutoMigrate(tables...); err != nil {
-		return fmt.Errorf("failed to create schema: %s", err)
+	if _, err = db.Exec(dbSchema); err != nil {
+		return fmt.Errorf("failed to init db schema: %s", err)
 	}
 
-	triggers := []string{
-		trigger_ensure_individual_sport,
-		trigger_ensure_team_sport,
-		trigger_ensure_team_members_country,
-	}
-	for _, trigger := range triggers {
-		if err := db.Exec(trigger).Error; err != nil {
-			return fmt.Errorf("failed to create trigger: %s", err)
-		}
-	}
-
-	dbState.ctx = ctx
-	dbState.db = db
 	return nil
 }
 
 func getCountries() ([]Country, error) {
-	return gorm.G[Country](dbState.db).Find(dbState.ctx)
+	var countries []Country
+
+	rows, err := db.Query("SELECT code, name FROM countries;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		country := Country{}
+		if err := rows.Scan(&country.Code, &country.Name); err != nil {
+			return nil, err
+		}
+		countries = append(countries, country)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return countries, nil
 }
 
 func addCountry(code string, name string) error {
-	return gorm.G[Country](dbState.db).Create(dbState.ctx, &Country{
-		Code: code,
-		Name: name,
-	})
+	_, err := db.Exec("INSERT INTO countries ( code, name ) VALUES ( ?, ? );", code, name)
+	return err
 }
 
 func deleteCountry(code string) error {
-	_, err := gorm.G[Country](dbState.db).Where("code = ?", code).Delete(dbState.ctx)
+	_, err := db.Exec("DELETE FROM countries WHERE code = ?;", code)
 	return err
 }
 
