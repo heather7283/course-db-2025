@@ -1,12 +1,12 @@
 -- Страны
-CREATE TABLE countries (
+CREATE TABLE IF NOT EXISTS countries (
     code CHAR(3) PRIMARY KEY,
 
     name TEXT NOT NULL UNIQUE
 );
 
 -- Виды спорта
-CREATE TABLE sports (
+CREATE TABLE IF NOT EXISTS sports (
     code CHAR(3) NOT NULL PRIMARY KEY,
 
     name TEXT NOT NULL UNIQUE,
@@ -15,7 +15,7 @@ CREATE TABLE sports (
 );
 
 -- Спортсмены
-CREATE TABLE athletes (
+CREATE TABLE IF NOT EXISTS athletes (
     id INTEGER PRIMARY KEY,
 
     name TEXT NOT NULL,
@@ -27,11 +27,11 @@ CREATE TABLE athletes (
     FOREIGN KEY ( country_code ) REFERENCES countries ( code )
 );
 
-CREATE INDEX idx_athletes_country_code ON athletes ( country_code );
-CREATE INDEX idx_athletes_gender ON athletes ( gender );
+CREATE INDEX IF NOT EXISTS idx_athletes_country_code ON athletes ( country_code );
+CREATE INDEX IF NOT EXISTS idx_athletes_gender ON athletes ( gender );
 
 -- Команды (для командных видов спорта)
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY,
 
     name TEXT NOT NULL,
@@ -43,11 +43,11 @@ CREATE TABLE teams (
     FOREIGN KEY ( sport_code ) REFERENCES sports ( code )
 );
 
-CREATE INDEX idx_teams_country_code ON teams ( country_code );
-CREATE INDEX idx_teams_sport_code ON teams ( sport_code );
+CREATE INDEX IF NOT EXISTS idx_teams_country_code ON teams ( country_code );
+CREATE INDEX IF NOT EXISTS idx_teams_sport_code ON teams ( sport_code );
 
 -- Таблица для связи между командами и их участниками
-CREATE TABLE team_members (
+CREATE TABLE IF NOT EXISTS team_members (
     team_id INTEGER,
     athlete_id INTEGER,
 
@@ -57,14 +57,14 @@ CREATE TABLE team_members (
 );
 
 -- Площадки
-CREATE TABLE sites (
+CREATE TABLE IF NOT EXISTS sites (
     id INTEGER PRIMARY KEY,
 
     name TEXT NOT NULL UNIQUE
 );
 
 -- Проведённые соревнования
-CREATE TABLE competitions (
+CREATE TABLE IF NOT EXISTS competitions (
     id INTEGER PRIMARY KEY,
 
     time TIMESTAMP NOT NULL CHECK ( time < CURRENT_TIMESTAMP ),
@@ -76,11 +76,11 @@ CREATE TABLE competitions (
     FOREIGN KEY ( site_id ) REFERENCES sites ( id )
 );
 
-CREATE INDEX idx_competitions_sport_code ON competitions ( sport_code );
-CREATE INDEX idx_competitions_site_id ON competitions ( site_id );
+CREATE INDEX IF NOT EXISTS idx_competitions_sport_code ON competitions ( sport_code );
+CREATE INDEX IF NOT EXISTS idx_competitions_site_id ON competitions ( site_id );
 
 -- Таблица для связи атлетов и соревнований, в которых они участвовали
-CREATE TABLE competition_athletes (
+CREATE TABLE IF NOT EXISTS competition_athletes (
     competition_id INTEGER,
     athlete_id INTEGER,
 
@@ -96,7 +96,7 @@ CREATE TABLE competition_athletes (
 );
 
 -- Таблица для связи команд и соревнований, в которых они участвовали
-CREATE TABLE competition_teams (
+CREATE TABLE IF NOT EXISTS competition_teams (
     competition_id INTEGER,
     team_id INTEGER,
 
@@ -112,7 +112,7 @@ CREATE TABLE competition_teams (
 );
 
 -- вьюха которая объединяет индивидуальные и коммандные результаты
-CREATE VIEW competition_results AS
+CREATE VIEW IF NOT EXISTS competition_results AS
     SELECT
         competition_id,
         'athlete' AS participant_type,
@@ -129,7 +129,7 @@ CREATE VIEW competition_results AS
 ;
 
 -- вьюха предоставляющая данные о кол-ве медалей у каждой страны
-CREATE VIEW country_medals AS
+CREATE VIEW IF NOT EXISTS country_medals AS
     SELECT
         c.name AS country,
         COUNT(CASE WHEN cr.place = 1 THEN 1 END) AS gold,
@@ -148,7 +148,7 @@ CREATE VIEW country_medals AS
 
 -- триггер который проверяет чтобы в таблицу с командными результатами
 -- нельзя было пихать индивидуальные виды спорта
-CREATE TRIGGER ensure_individual_sport BEFORE INSERT ON competition_athletes FOR EACH ROW BEGIN
+CREATE TRIGGER IF NOT EXISTS ensure_individual_sport BEFORE INSERT ON competition_athletes FOR EACH ROW BEGIN
     SELECT
     CASE
         WHEN (
@@ -162,7 +162,7 @@ CREATE TRIGGER ensure_individual_sport BEFORE INSERT ON competition_athletes FOR
 END;
 
 -- то же что и выше но наоборт
-CREATE TRIGGER ensure_team_sport BEFORE INSERT ON competition_teams FOR EACH ROW BEGIN
+CREATE TRIGGER IF NOT EXISTS ensure_team_sport BEFORE INSERT ON competition_teams FOR EACH ROW BEGIN
     SELECT
     CASE
         WHEN (
@@ -176,7 +176,7 @@ CREATE TRIGGER ensure_team_sport BEFORE INSERT ON competition_teams FOR EACH ROW
 END;
 
 -- триггер который не даст добавить атлета в команду чужой страны
-CREATE TRIGGER ensure_team_members_country BEFORE INSERT ON team_members FOR EACH ROW BEGIN
+CREATE TRIGGER IF NOT EXISTS ensure_team_members_country BEFORE INSERT ON team_members FOR EACH ROW BEGIN
     SELECT
     CASE
         WHEN (
