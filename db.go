@@ -51,6 +51,14 @@ type Competition struct {
 	Site Site
 }
 
+type CountryMedals struct {
+    Country string
+    Gold    int
+    Silver  int
+    Bronze  int
+    Total   int
+}
+
 //go:embed schema.sql
 var dbSchema string
 
@@ -355,5 +363,30 @@ func addCompetition(t time.Time, sportCode string, siteID int) error {
 func deleteCompetition(ID int) error {
 	_, err := db.Exec("DELETE FROM competitions WHERE id = ?;", ID)
 	return err
+}
+
+
+func getCountryMedals() ([]CountryMedals, error) {
+    var medals []CountryMedals
+
+    rows, err := db.Query("SELECT country, gold, silver, bronze, total FROM country_medals;")
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    for rows.Next() {
+        m := CountryMedals{}
+        err := rows.Scan(&m.Country, &m.Gold, &m.Silver, &m.Bronze, &m.Total)
+        if err != nil {
+            return nil, err
+        }
+        medals = append(medals, m)
+    }
+    if err = rows.Err(); err != nil {
+        return nil, err
+    }
+
+    return medals, nil
 }
 

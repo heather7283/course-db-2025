@@ -18,9 +18,10 @@ const (
 	TabSites
 	TabTeams
 	TabCompetitions
+	TabMedals
 )
 
-var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes, TabSites, TabTeams, TabCompetitions}
+var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes, TabSites, TabTeams, TabCompetitions, TabMedals}
 
 var uiState struct {
 	oldTab Tab
@@ -84,6 +85,12 @@ var uiState struct {
 	competitionFilterSport Sport
 	competitionFilterSite  Site
 
+    medalsList []CountryMedals
+    medalsListProcessed []*CountryMedals
+    medalsDirty bool
+    medalsSortSwitch int32
+    medalsSortFunc func(a, b *CountryMedals) bool
+
 	hasError bool
 	error string
 }
@@ -101,6 +108,7 @@ func (tab Tab) name() string {
 	case TabSites: return "Места проведения"
 	case TabTeams: return "Команды"
 	case TabCompetitions: return "Соревнования"
+	case TabMedals: return "Медали"
 	default: return "INVALID TAB"
 	}
 }
@@ -119,6 +127,7 @@ func (tab Tab) show() {
 	case TabSites: showSites(switched)
 	case TabTeams: showTeams(switched)
 	case TabCompetitions: showCompetitions(switched)
+	case TabMedals: showMedals(switched)
 	default: showError(fmt.Errorf("INVALID TAB"))
 	}
 }
@@ -744,6 +753,111 @@ func processTeams() {
 	}
 }
 
+func processMedals() {
+    uiState.medalsListProcessed = make([]*CountryMedals, len(uiState.medalsList))
+    for i := range uiState.medalsList {
+        uiState.medalsListProcessed[i] = &uiState.medalsList[i]
+    }
+
+    if uiState.medalsSortFunc != nil {
+        sort.Slice(uiState.medalsListProcessed, func(i, j int) bool {
+            return uiState.medalsSortFunc(uiState.medalsListProcessed[i], uiState.medalsListProcessed[j])
+        })
+    }
+}
+
+func showMedals(switched bool) {
+    if switched {
+        medals, err := getCountryMedals()
+        if err != nil {
+            showError(err)
+        } else {
+            uiState.medalsList = medals
+        }
+        uiState.medalsDirty = true
+    }
+
+    imgui.TextUnformatted("Сортировка")
+
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("Серебро##medalsSort", &uiState.medalsSortSwitch, 1) {
+        uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
+            if a.Gold != b.Gold {
+                return a.Gold > b.Gold
+            }
+            if a.Silver != b.Silver {
+                return a.Silver > b.Silver
+            }
+            return a.Bronze > b.Bronze
+        }
+        uiState.medalsDirty = true
+    }
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("По серебру##medalsSort", &uiState.medalsSortSwitch, 2) {
+        uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
+            if a.Silver != b.Silver {
+                return a.Silver > b.Silver
+            }
+            if a.Gold != b.Gold {
+                return a.Gold > b.Gold
+            }
+            return a.Bronze > b.Bronze
+        }
+        uiState.medalsDirty = true
+    }
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("Бронза##medalsSort", &uiState.medalsSortSwitch, 3) {
+        uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
+            if a.Bronze != b.Bronze {
+                return a.Bronze > b.Bronze
+            }
+            if a.Gold != b.Gold {
+                return a.Gold > b.Gold
+            }
+            return a.Silver > b.Silver
+        }
+        uiState.medalsDirty = true
+    }
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("По общему числу##medalsSort", &uiState.medalsSortSwitch, 4) {
+        uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
+            if a.Total != b.Total {
+                return a.Total > b.Total
+            }
+            if a.Gold != b.Gold {
+                return a.Gold > b.Gold
+            }
+            return a.Silver > b.Silver
+        }
+        uiState.medalsDirty = true
+    }
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("Страна##medalsSort", &uiState.medalsSortSwitch, 5) {
+        uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
+            return a.Country < b.Country
+        }
+        uiState.medalsDirty = true
+    }
+
+
+    if uiState.medalsDirty {
+        uiState.medalsDirty = false
+        processMedals()
+    }
+
+    imgui.Separator()
+
+
+    showTable("##medalsTable", []string{"Страна", "Золото", "Серебро", "Бронза", "Всего"},
+        uiState.medalsListProcessed, func(m *CountryMedals) {
+            imgui.TableNextRow()
+            imgui.TableNextColumn()
+            imgui.TextUnformatted(m.Country)
+            imgui.TableNextColumn()
+            imgui.TextUnformatted(fmt.Sprintf("%d", m.Gold))
+            imgui.TableNextColumn()
+            imgui.TextUnformatted(fmt.Sprintf("%d", m.Silver))
+            imgui.TableNextColumn()
+            imgui.TextUnformatted(fmt.Sprintf("%d", m.Bronze))
+            imgui.TableNextColumn()
+            imgui.TextUnformatted(fmt.Sprintf("%d", m.Total))
+        })
+}
 func showTeams(switched bool) {
 	if switched {
 		uiState.teamsList, _ = getTeams()
@@ -787,7 +901,6 @@ func showTeams(switched bool) {
 		processTeams()
 	}
 
-	// We'll need the list of all athletes for the "add member" comboboxes
 	allAthletes, _ := getAthletes()
 
 	showTable("##teamsTable", []string{"", "Название", "Страна", "Вид спорта", "Участники"},
