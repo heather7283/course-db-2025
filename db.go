@@ -21,13 +21,11 @@ type Sport struct {
 }
 
 type Athlete struct {
-	ID uint
+	ID int
 	Name string
 	Gender string
 	Birthday time.Time
-
-	CountryCode string
-	Country Country
+	CountryName string
 }
 
 type Team struct {
@@ -144,6 +142,47 @@ func addSport(code string, name string, team bool) error {
 
 func deleteSport(code string) error {
 	_, err := db.Exec("DELETE FROM sports WHERE code = ?;", code)
+	return err
+}
+
+func getAthletes() ([]Athlete, error) {
+	var athletes []Athlete
+
+	rows, err := db.Query("SELECT a.id, a.name, a.gender, a.birthday, c.name FROM athletes a JOIN countries c ON c.code = a.country_code;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		athlete := Athlete{}
+		err := rows.Scan(&athlete.ID, &athlete.Name, &athlete.Gender, &athlete.Birthday, &athlete.CountryName)
+		if err != nil {
+			return nil, err
+		}
+		athletes = append(athletes, athlete)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return athletes, nil
+}
+
+func addAthlete(name string, isMale bool, birthday time.Time, countryCode string) error {
+	var gender string
+	if isMale {
+		gender = "M"
+	} else {
+		gender = "F"
+	}
+	_, err := db.Exec("INSERT INTO athletes ( name, gender, birthday, country_code ) VALUES ( ?, ?, ?, ? );",
+		name, gender, birthday.Unix(), countryCode)
+	return err
+}
+
+func deleteAthlete(ID int) error {
+	_, err := db.Exec("DELETE FROM athletes WHERE id = ?;", ID)
 	return err
 }
 

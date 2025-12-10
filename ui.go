@@ -11,23 +11,26 @@ type Tab int
 const (
 	TabCountries Tab = iota
 	TabSports Tab = iota
+	TabAthletes Tab = iota
 )
 
-var tabs []Tab = []Tab{TabCountries, TabSports}
+var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes}
 
 var uiState struct {
 	oldTab Tab
 
-	countriesOpened bool
 	countriesList []Country
 	countryCodeInput string
 	countryNameInput string
 
-	sportsOpened bool
 	sportsList []Sport
 	sportCodeInput string
 	sportNameInput string
 	sportIsTeamInput bool
+
+	athletesList []Athlete
+	athleteNameInput string
+	athleteIsMaleInput bool
 
 	hasError bool
 	error string
@@ -42,6 +45,7 @@ func (tab Tab) name() string {
 	switch tab {
 	case TabCountries: return "Страны"
 	case TabSports: return "Виды спорта"
+	case TabAthletes: return "Спорстмены"
 	default: return "INVALID TAB"
 	}
 }
@@ -56,6 +60,7 @@ func (tab Tab) show() {
 	switch tab {
 	case TabCountries: showCountries(switched)
 	case TabSports: showSports(switched)
+	case TabAthletes: showAthletes(switched)
 	default: showError(fmt.Errorf("INVALID TAB"))
 	}
 }
@@ -63,6 +68,70 @@ func (tab Tab) show() {
 func showError(err error) {
 	uiState.hasError = true
 	uiState.error = err.Error()
+}
+
+func showAthletes(switched bool) {
+	if switched {
+		uiState.athletesList, _ = getAthletes()
+	}
+
+	//avail := imgui.ContentRegionAvail()
+	//imgui.SetNextItemWidth(avail.X / 4)
+	//imgui.InputTextWithHint("##athleteNameInput", "Имя", &uiState.athleteNameInput, 0, nil)
+	//imgui.SameLine()
+	//if imgui.RadioButtonBool("М", uiState.athleteIsMaleInput) {
+	//	uiState.athleteIsMaleInput = true
+	//} else if imgui.RadioButtonBool("Ж", !uiState.athleteIsMaleInput) {
+	//	uiState.athleteIsMaleInput = false
+	//}
+	//imgui.SetNextItemWidth(avail.X / 4)
+	//imgui.InputTextWithHint("##athleteBirthdayInput", "День рождения", &uiState.sportNameInput, 0, nil)
+	//imgui.SameLine()
+	//imgui.SetNextItemWidth(avail.X / 1)
+	//if imgui.Button("Добавить") {
+	//	err := addAthlete(uiState.athleteNameInput, uiState.athleteIsMaleInput, 0, )
+	//	if err != nil {
+	//		showError(err)
+	//	} else {
+	//		uiState.sportsList, _ = getSports()
+	//	}
+	//}
+
+	if imgui.BeginTableV("##athletesTable", 5, tableFlags, imgui.Vec2{}, 0) {
+		imgui.TableSetupColumn("")
+		imgui.TableSetupColumn("Имя")
+		imgui.TableSetupColumn("Пол")
+		imgui.TableSetupColumn("День рождения")
+		imgui.TableSetupColumn("Страна")
+		imgui.TableHeadersRow()
+		for i, a := range uiState.athletesList {
+			var gender string
+			if a.Gender == "M" {
+				gender = "М"
+			} else {
+				gender = "Ж"
+			}
+			imgui.PushIDInt(int32(i))
+
+			imgui.TableNextRow()
+			imgui.TableNextColumn()
+			if (imgui.Button("x")) {
+				deleteAthlete(a.ID)
+				uiState.athletesList, _ = getAthletes()
+			}
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(a.Name)
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(gender)
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(a.Birthday.String())
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(a.CountryName)
+
+			imgui.PopID()
+		}
+		imgui.EndTable()
+	}
 }
 
 func showSports(switched bool) {
@@ -200,6 +269,5 @@ func runUI() {
 
 func initUI() {
 	uiState.oldTab = 100500
-	uiState.countriesOpened = false
 }
 
