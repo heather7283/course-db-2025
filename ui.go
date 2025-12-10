@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/AllenDang/cimgui-go/imgui"
@@ -29,7 +30,11 @@ var uiState struct {
 	sportNameInput string
 	sportIsTeamInput bool
 
+	athletesDirty bool
+	athletesSortSwitch int32
+	athletesSortFunc func(a *Athlete, b *Athlete) bool
 	athletesList []Athlete
+	athletesListProcessed []*Athlete
 	athleteNameInput string
 	athleteIsMaleInput bool
 	athleteNameFilter string
@@ -73,10 +78,10 @@ func showError(err error) {
 	uiState.error = err.Error()
 }
 
-func showTable[T any](id string, headers []string, items []T, filter func(item *T) bool, callback func(item *T)) {
+func showTable[T any](id string, headers []string, items []T, callback func(item T)) {
 	cols := len(headers)
 	if imgui.BeginTableV(id, int32(cols), tableFlags, imgui.Vec2{}, 0) {
-		imgui.TableSetupScrollFreeze(1, 1)
+		imgui.TableSetupScrollFreeze(0, 1)
 
 		for _, header := range headers {
 			imgui.TableSetupColumn(header)
@@ -84,21 +89,44 @@ func showTable[T any](id string, headers []string, items []T, filter func(item *
 		imgui.TableHeadersRow()
 
 		for i := range items {
-			if (filter(&items[i])) {
-				imgui.PushIDInt(int32(i))
-				callback(&items[i])
-				imgui.PopID()
-			}
+			imgui.PushIDInt(int32(i))
+			callback(items[i])
+			imgui.PopID()
 		}
 		imgui.EndTable()
+	}
+}
+
+func processAthletes() {
+	uiState.athletesListProcessed = make([]*Athlete, 0, len(uiState.athletesList))
+
+	for i := range uiState.athletesList {
+		a := &uiState.athletesList[i]
+		if (len(uiState.athleteNameFilter) > 0 && !strings.Contains(a.Name, uiState.athleteNameFilter)) {
+			continue
+		} else if (uiState.athleteGenderFilter > 0) {
+			if (uiState.athleteGenderFilter == 1 && a.Gender != "M" ||
+				uiState.athleteGenderFilter == 2 && a.Gender != "F") {
+				continue
+			}
+		}
+		uiState.athletesListProcessed = append(uiState.athletesListProcessed, a)
+	}
+
+	if uiState.athletesSortFunc != nil {
+		sort.Slice(uiState.athletesListProcessed, func(i, j int) bool {
+			return uiState.athletesSortFunc(uiState.athletesListProcessed[i], uiState.athletesListProcessed[j])
+		})
 	}
 }
 
 func showAthletes(switched bool) {
 	if switched {
 		uiState.athletesList, _ = getAthletes()
+		uiState.athletesDirty = true
 	}
 
+	// TODO
 	//avail := imgui.ContentRegionAvail()
 	//imgui.SetNextItemWidth(avail.X / 4)
 	//imgui.InputTextWithHint("##athleteNameInput", "Имя", &uiState.athleteNameInput, 0, nil)
@@ -122,26 +150,57 @@ func showAthletes(switched bool) {
 	//}
 
 	avail := imgui.ContentRegionAvail()
-	imgui.TextUnformatted("Фильтр"); imgui.SameLine()
-	imgui.SetNextItemWidth(avail.X / 4)
-	imgui.InputTextWithHint("##athleteNameFilter", "Имя", &uiState.athleteNameFilter, 0, nil); imgui.SameLine()
-	imgui.RadioButtonIntPtr("Все", &uiState.athleteGenderFilter, 0); imgui.SameLine()
-	imgui.RadioButtonIntPtr("М", &uiState.athleteGenderFilter, 1); imgui.SameLine()
-	imgui.RadioButtonIntPtr("Ж", &uiState.athleteGenderFilter, 2)
+	imgui.TextUnformatted("Фильтр")
 
-	showTable("##athletesTable", []string{ "", "Имя", "Пол", "День рождения", "Страна" }, uiState.athletesList,
-		func(a *Athlete) bool {
-			if (len(uiState.athleteNameFilter) > 0 && !strings.Contains(a.Name, uiState.athleteNameFilter)) {
-				return false
-			}
-			if (uiState.athleteGenderFilter > 0) {
-				if (uiState.athleteGenderFilter == 1 && a.Gender != "M" ||
-					uiState.athleteGenderFilter == 2 && a.Gender != "F") {
-					return false
-				}
-			}
-			return true
-		}, func(a *Athlete) {
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	if imgui.InputTextWithHint("##athletesFilterName", "Имя", &uiState.athleteNameFilter, 0, nil) {
+		uiState.athletesDirty = true
+	}
+
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Все##athletesFilter", &uiState.athleteGenderFilter, 0) {
+		uiState.athletesDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("М##athletesFilter", &uiState.athleteGenderFilter, 1) {
+		uiState.athletesDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Ж##athletesFilter", &uiState.athleteGenderFilter, 2) {
+		uiState.athletesDirty = true
+	}
+
+	imgui.TextUnformatted("Сортировка")
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Имя##athletesSort", &uiState.athletesSortSwitch, 1) {
+		uiState.athletesSortFunc = func(a *Athlete, b *Athlete) bool {
+			return a.Name < b.Name
+		}
+		uiState.athletesDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Пол##athletesSort", &uiState.athletesSortSwitch, 2) {
+		uiState.athletesSortFunc = func(a *Athlete, b *Athlete) bool {
+			return a.Gender < b.Gender
+		}
+		uiState.athletesDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("День рождения##athletesSort", &uiState.athletesSortSwitch, 3) {
+		uiState.athletesSortFunc = func(a *Athlete, b *Athlete) bool {
+			return a.Birthday.Unix() < b.Birthday.Unix()
+		}
+		uiState.athletesDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Страна##athletesSort", &uiState.athletesSortSwitch, 4) {
+		uiState.athletesSortFunc = func(a *Athlete, b *Athlete) bool {
+			return a.CountryName < b.CountryName
+		}
+		uiState.athletesDirty = true
+	}
+
+	if uiState.athletesDirty {
+		uiState.athletesDirty = false
+		processAthletes()
+	}
+
+	showTable("##athletesTable", []string{ "", "Имя", "Пол", "День рождения", "Страна" },
+		uiState.athletesListProcessed, func(a *Athlete) {
 			var gender string
 			if a.Gender == "M" {
 				gender = "М"
@@ -154,6 +213,7 @@ func showAthletes(switched bool) {
 			if (imgui.Button("x")) {
 				deleteAthlete(a.ID)
 				uiState.athletesList, _ = getAthletes()
+				uiState.athletesDirty = true
 			}
 			imgui.TableNextColumn()
 			imgui.TextUnformatted(a.Name)
