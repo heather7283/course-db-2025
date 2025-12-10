@@ -29,7 +29,7 @@ type Athlete struct {
 }
 
 type Team struct {
-	ID uint
+	ID int
 	Name string
 
 	CountryCode string
@@ -42,12 +42,12 @@ type Team struct {
 }
 
 type Site struct {
-	ID uint
+	ID int
 	Name string
 }
 
 type Competition struct {
-	ID uint
+	ID int
 	Time time.Time
 
 	SportCode string
@@ -183,6 +183,40 @@ func addAthlete(name string, isMale bool, birthday time.Time, countryCode string
 
 func deleteAthlete(ID int) error {
 	_, err := db.Exec("DELETE FROM athletes WHERE id = ?;", ID)
+	return err
+}
+
+func getSites() ([]Site, error) {
+	var sites []Site
+
+	rows, err := db.Query("SELECT id, name FROM sites;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		site := Site{}
+		err := rows.Scan(&site.ID, &site.Name)
+		if err != nil {
+			return nil, err
+		}
+		sites = append(sites, site)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return sites, nil
+}
+
+func addSite(name string) error {
+	_, err := db.Exec("INSERT INTO sites ( name ) VALUES ( ? );", name)
+	return err
+}
+
+func deleteSite(ID int) error {
+	_, err := db.Exec("DELETE FROM sites WHERE id = ?;", ID)
 	return err
 }
 

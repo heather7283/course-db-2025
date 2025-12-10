@@ -15,9 +15,10 @@ const (
 	TabCountries Tab = iota
 	TabSports Tab = iota
 	TabAthletes Tab = iota
+	TabSites Tab = iota
 )
 
-var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes}
+var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes, TabSites}
 
 var uiState struct {
 	oldTab Tab
@@ -56,20 +57,27 @@ var uiState struct {
 	athleteNameFilter string
 	athleteGenderFilter int32
 
+	sitesDirty bool
+	sitesList []Site
+	sitesListProcessed []*Site
+	siteNameInput string
+	siteNameFilter string
+
 	hasError bool
 	error string
 }
 
 var tableFlags imgui.TableFlags =
-	imgui.TableFlagsBordersOuter|imgui.TableFlagsBordersInner|imgui.TableFlagsRowBg|
-	imgui.TableFlagsScrollY|imgui.TableFlagsScrollX|imgui.TableFlagsResizable|
-	imgui.TableFlagsHighlightHoveredColumn;
+	imgui.TableFlagsBordersOuter | imgui.TableFlagsBordersInner | imgui.TableFlagsRowBg |
+		imgui.TableFlagsScrollY | imgui.TableFlagsScrollX | imgui.TableFlagsResizable |
+		imgui.TableFlagsHighlightHoveredColumn
 
 func (tab Tab) name() string {
 	switch tab {
 	case TabCountries: return "Страны"
 	case TabSports: return "Виды спорта"
-	case TabAthletes: return "Спорстмены"
+	case TabAthletes: return "Спортсмены"
+	case TabSites: return "Места проведения"
 	default: return "INVALID TAB"
 	}
 }
@@ -85,6 +93,7 @@ func (tab Tab) show() {
 	case TabCountries: showCountries(switched)
 	case TabSports: showSports(switched)
 	case TabAthletes: showAthletes(switched)
+	case TabSites: showSites(switched)
 	default: showError(fmt.Errorf("INVALID TAB"))
 	}
 }
@@ -113,16 +122,77 @@ func showTable[T any](id string, headers []string, items []T, callback func(item
 	}
 }
 
+func processSites() {
+	uiState.sitesListProcessed = make([]*Site, 0, len(uiState.sitesList))
+
+	for i := range uiState.sitesList {
+		s := &uiState.sitesList[i]
+		if len(uiState.siteNameFilter) > 0 && !strings.Contains(s.Name, uiState.siteNameFilter) {
+			continue
+		}
+		uiState.sitesListProcessed = append(uiState.sitesListProcessed, s)
+	}
+}
+
+func showSites(switched bool) {
+	if switched {
+		uiState.sitesList, _ = getSites()
+		uiState.sitesDirty = true
+	}
+
+	avail := imgui.ContentRegionAvail()
+	imgui.SetNextItemWidth(avail.X / 3)
+	imgui.InputTextWithHint("##siteNameInput", "Название места", &uiState.siteNameInput, 0, nil)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 1)
+	if imgui.Button("Добавить") {
+		err := addSite(uiState.siteNameInput)
+		if err != nil {
+			showError(err)
+		} else {
+			uiState.sitesList, _ = getSites()
+			uiState.sitesDirty = true
+		}
+	}
+
+	imgui.Separator()
+	imgui.TextUnformatted("Фильтр")
+
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 3)
+	if imgui.InputTextWithHint("##siteNameFilter", "Название", &uiState.siteNameFilter, 0, nil) {
+		uiState.sitesDirty = true
+	}
+
+	if uiState.sitesDirty {
+		uiState.sitesDirty = false
+		processSites()
+	}
+
+	showTable("##sitesTable", []string{"", "Название"},
+		uiState.sitesListProcessed, func(s *Site) {
+			imgui.TableNextRow()
+			imgui.TableNextColumn()
+			if imgui.Button("x") {
+				deleteSite(s.ID)
+				uiState.sitesList, _ = getSites()
+				uiState.sitesDirty = true
+			}
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(s.Name)
+		})
+}
+
 func processAthletes() {
 	uiState.athletesListProcessed = make([]*Athlete, 0, len(uiState.athletesList))
 
 	for i := range uiState.athletesList {
 		a := &uiState.athletesList[i]
-		if (len(uiState.athleteNameFilter) > 0 && !strings.Contains(a.Name, uiState.athleteNameFilter)) {
+		if len(uiState.athleteNameFilter) > 0 && !strings.Contains(a.Name, uiState.athleteNameFilter) {
 			continue
-		} else if (uiState.athleteGenderFilter > 0) {
-			if (uiState.athleteGenderFilter == 1 && a.Gender != "M" ||
-				uiState.athleteGenderFilter == 2 && a.Gender != "F") {
+		} else if uiState.athleteGenderFilter > 0 {
+			if (uiState.athleteGenderFilter == 1 && a.Gender != "M") ||
+				(uiState.athleteGenderFilter == 2 && a.Gender != "F") {
 				continue
 			}
 		}
@@ -141,7 +211,7 @@ func pickCountry(country *Country) {
 		defer imgui.EndCombo()
 		countries, _ := getCountries()
 		for _, c := range countries {
-			if (imgui.SelectableBool(c.Name)) {
+			if imgui.SelectableBool(c.Name) {
 				*country = c
 				return
 			}
@@ -263,7 +333,7 @@ func showAthletes(switched bool) {
 		processAthletes()
 	}
 
-	showTable("##athletesTable", []string{ "", "Имя", "Пол", "День рождения", "Страна" },
+	showTable("##athletesTable", []string{"", "Имя", "Пол", "День рождения", "Страна"},
 		uiState.athletesListProcessed, func(a *Athlete) {
 			var gender string
 			if a.Gender == "M" {
@@ -274,7 +344,7 @@ func showAthletes(switched bool) {
 
 			imgui.TableNextRow()
 			imgui.TableNextColumn()
-			if (imgui.Button("x")) {
+			if imgui.Button("x") {
 				deleteAthlete(a.ID)
 				uiState.athletesList, _ = getAthletes()
 				uiState.athletesDirty = true
@@ -523,7 +593,6 @@ func runUI() {
 	imgui.SetNextWindowSize(imgui.CurrentIO().DisplaySize())
 	imgui.BeginV("##mainWin", nil, imgui.WindowFlagsNoMove|imgui.WindowFlagsNoDecoration)
 
-
 	if imgui.BeginTabBar("##tabBar") {
 		for _, tab := range tabs {
 			if imgui.BeginTabItem(tab.name()) {
@@ -541,7 +610,7 @@ func runUI() {
 	}
 	if imgui.BeginPopupModalV("Ошибка", nil, imgui.WindowFlagsNoResize) {
 		imgui.TextUnformatted(uiState.error)
-		if (imgui.Button("OK")) {
+		if imgui.Button("OK") {
 			imgui.CloseCurrentPopup()
 		}
 		imgui.EndPopup()
@@ -553,4 +622,3 @@ func runUI() {
 func initUI() {
 	uiState.oldTab = 100500
 }
-
