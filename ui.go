@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 )
@@ -41,7 +42,7 @@ var uiState struct {
 	sportsListProcessed []*Sport
 	sportCodeFilter string
 	sportNameFilter string
-	sportTeamFilter int32 // 0 = все, 1 = командные, 2 = одиночные
+	sportTeamFilter int32
 
 	athletesDirty bool
 	athletesSortSwitch int32
@@ -50,6 +51,8 @@ var uiState struct {
 	athletesListProcessed []*Athlete
 	athleteNameInput string
 	athleteIsMaleInput bool
+	athleteBirthdayInput string
+	athleteCountryInput Country
 	athleteNameFilter string
 	athleteGenderFilter int32
 
@@ -139,32 +142,48 @@ func showAthletes(switched bool) {
 		uiState.athletesDirty = true
 	}
 
-	// TODO
-	//avail := imgui.ContentRegionAvail()
-	//imgui.SetNextItemWidth(avail.X / 4)
-	//imgui.InputTextWithHint("##athleteNameInput", "Имя", &uiState.athleteNameInput, 0, nil)
-	//imgui.SameLine()
-	//if imgui.RadioButtonBool("М", uiState.athleteIsMaleInput) {
-	//	uiState.athleteIsMaleInput = true
-	//} else if imgui.RadioButtonBool("Ж", !uiState.athleteIsMaleInput) {
-	//	uiState.athleteIsMaleInput = false
-	//}
-	//imgui.SetNextItemWidth(avail.X / 4)
-	//imgui.InputTextWithHint("##athleteBirthdayInput", "День рождения", &uiState.sportNameInput, 0, nil)
-	//imgui.SameLine()
-	//imgui.SetNextItemWidth(avail.X / 1)
-	//if imgui.Button("Добавить") {
-	//	err := addAthlete(uiState.athleteNameInput, uiState.athleteIsMaleInput, 0, )
-	//	if err != nil {
-	//		showError(err)
-	//	} else {
-	//		uiState.sportsList, _ = getSports()
-	//	}
-	//}
+	avail := imgui.ContentRegionAvail()
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.InputTextWithHint("##athleteNameInput", "Имя", &uiState.athleteNameInput, 0, nil)
+	if imgui.SameLine(); imgui.RadioButtonBool("М", uiState.athleteIsMaleInput) {
+		uiState.athleteIsMaleInput = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonBool("Ж", !uiState.athleteIsMaleInput) {
+		uiState.athleteIsMaleInput = false
+	}
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.SameLine()
+	imgui.InputTextWithHint("##athleteBirthdayInput", "День рождения", &uiState.athleteBirthdayInput, 0, nil)
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.SameLine()
+	if imgui.BeginCombo("##athleteCountryInput", uiState.athleteCountryInput.Name) {
+		countries, _ := getCountries()
+		for _, c := range countries {
+			if (imgui.SelectableBool(c.Name)) {
+				uiState.athleteCountryInput = c
+				break
+			}
+		}
+		imgui.EndCombo()
+	}
+	imgui.SetNextItemWidth(avail.X / 1)
+	imgui.SameLine()
+	if imgui.Button("Добавить") {
+		if t, err := time.Parse(time.DateOnly, uiState.athleteBirthdayInput); err != nil {
+			showError(err)
+		} else {
+			err := addAthlete(uiState.athleteNameInput, uiState.athleteIsMaleInput, t, uiState.athleteCountryInput.Code)
+			if err != nil {
+				showError(err)
+			} else {
+				uiState.athletesList, _ = getAthletes()
+				uiState.athletesDirty = true
+			}
+		}
+	}
 
 	imgui.Separator()
 
-	avail := imgui.ContentRegionAvail()
 	imgui.TextUnformatted("Фильтр")
 
 	imgui.SameLine()
@@ -235,7 +254,7 @@ func showAthletes(switched bool) {
 			imgui.TableNextColumn()
 			imgui.TextUnformatted(gender)
 			imgui.TableNextColumn()
-			imgui.TextUnformatted(a.Birthday.String())
+			imgui.TextUnformatted(a.Birthday.Format(time.DateOnly))
 			imgui.TableNextColumn()
 			imgui.TextUnformatted(a.CountryName)
 		})
