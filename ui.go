@@ -5,9 +5,12 @@ import (
 	"sort"
 	"strings"
 	"time"
+    "encoding/csv"
+    "os"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 )
+
 
 type Tab int
 
@@ -90,6 +93,7 @@ var uiState struct {
     medalsDirty bool
     medalsSortSwitch int32
     medalsSortFunc func(a, b *CountryMedals) bool
+    medalsReportPath string
 
 	hasError bool
 	error string
@@ -741,18 +745,6 @@ func showCountries(switched bool) {
 		})
 }
 
-func processTeams() {
-	uiState.teamsListProcessed = make([]*Team, 0, len(uiState.teamsList))
-
-	for i := range uiState.teamsList {
-		t := &uiState.teamsList[i]
-		if len(uiState.teamNameFilter) > 0 && !strings.Contains(t.Name, uiState.teamNameFilter) {
-			continue
-		}
-		uiState.teamsListProcessed = append(uiState.teamsListProcessed, t)
-	}
-}
-
 func processMedals() {
     uiState.medalsListProcessed = make([]*CountryMedals, len(uiState.medalsList))
     for i := range uiState.medalsList {
@@ -779,7 +771,7 @@ func showMedals(switched bool) {
 
     imgui.TextUnformatted("Сортировка")
 
-    if imgui.SameLine(); imgui.RadioButtonIntPtr("Серебро##medalsSort", &uiState.medalsSortSwitch, 1) {
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("Золото##medalsSort", &uiState.medalsSortSwitch, 1) {
         uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
             if a.Gold != b.Gold {
                 return a.Gold > b.Gold
@@ -791,7 +783,7 @@ func showMedals(switched bool) {
         }
         uiState.medalsDirty = true
     }
-    if imgui.SameLine(); imgui.RadioButtonIntPtr("По серебру##medalsSort", &uiState.medalsSortSwitch, 2) {
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("Серебро##medalsSort", &uiState.medalsSortSwitch, 2) {
         uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
             if a.Silver != b.Silver {
                 return a.Silver > b.Silver
@@ -815,7 +807,7 @@ func showMedals(switched bool) {
         }
         uiState.medalsDirty = true
     }
-    if imgui.SameLine(); imgui.RadioButtonIntPtr("По общему числу##medalsSort", &uiState.medalsSortSwitch, 4) {
+    if imgui.SameLine(); imgui.RadioButtonIntPtr("Сумма##medalsSort", &uiState.medalsSortSwitch, 4) {
         uiState.medalsSortFunc = func(a, b *CountryMedals) bool {
             if a.Total != b.Total {
                 return a.Total > b.Total
@@ -834,30 +826,92 @@ func showMedals(switched bool) {
         uiState.medalsDirty = true
     }
 
+   imgui.TextUnformatted("Экспорт отчёта:")
+   imgui.SameLine()
 
-    if uiState.medalsDirty {
-        uiState.medalsDirty = false
-        processMedals()
+   imgui.SetNextItemWidth(imgui.ContentRegionAvail().X / 4)
+   imgui.InputTextWithHint("##medalsReportPath", "Путь", &uiState.medalsReportPath, 0, nil)
+   imgui.SameLine()
+
+   if imgui.Button("Сформировать отчёт") {
+       if len(uiState.medalsListProcessed) == 0 {
+           showError(fmt.Errorf("нет данных для экспорта"))
+       } else {
+           err := exportMedalsToCSV(uiState.medalsReportPath, uiState.medalsListProcessed)
+           if err != nil {
+               showError(fmt.Errorf("не удалось сформировать отчёт: %w", err))
+           }
+       }
+   }
+
+   if uiState.medalsDirty {
+       uiState.medalsDirty = false
+       processMedals()
+   }
+
+   showTable("##medalsTable", []string{"Страна", "Золото", "Серебро", "Бронза", "Всего"},
+       uiState.medalsListProcessed, func(m *CountryMedals) {
+           imgui.TableNextRow()
+           imgui.TableNextColumn()
+           imgui.TextUnformatted(m.Country)
+           imgui.TableNextColumn()
+           imgui.TextUnformatted(fmt.Sprintf("%d", m.Gold))
+           imgui.TableNextColumn()
+           imgui.TextUnformatted(fmt.Sprintf("%d", m.Silver))
+           imgui.TableNextColumn()
+           imgui.TextUnformatted(fmt.Sprintf("%d", m.Bronze))
+           imgui.TableNextColumn()
+           imgui.TextUnformatted(fmt.Sprintf("%d", m.Total))
+       })
+}
+
+func exportMedalsToCSV(filePath string, medals []*CountryMedals) error {
+    file, err := os.Create(filePath)
+    if err != nil {
+        return fmt.Errorf("не удалось создать файл: %w", err)
+    }
+    defer file.Close()
+
+    writer := csv.NewWriter(file)
+    defer writer.Flush()
+
+    header := []string{"Страна", "Золото", "Серебро", "Бронза", "Всего"}
+    if err := writer.Write(header); err != nil {
+        return fmt.Errorf("не удалось записать заголовок: %w", err)
     }
 
-    imgui.Separator()
+    for _, medal := range medals {
+        record := []string{
+            medal.Country,
+            fmt.Sprintf("%d", medal.Gold),
+            fmt.Sprintf("%d", medal.Silver),
+            fmt.Sprintf("%d", medal.Bronze),
+            fmt.Sprintf("%d", medal.Total),
+        }
+        if err := writer.Write(record); err != nil {
+            return fmt.Errorf("не удалось записать строку для страны %s: %w", medal.Country, err)
+        }
+    }
 
+    if err := writer.Error(); err != nil {
+        return fmt.Errorf("ошибка при записи в CSV: %w", err)
+    }
 
-    showTable("##medalsTable", []string{"Страна", "Золото", "Серебро", "Бронза", "Всего"},
-        uiState.medalsListProcessed, func(m *CountryMedals) {
-            imgui.TableNextRow()
-            imgui.TableNextColumn()
-            imgui.TextUnformatted(m.Country)
-            imgui.TableNextColumn()
-            imgui.TextUnformatted(fmt.Sprintf("%d", m.Gold))
-            imgui.TableNextColumn()
-            imgui.TextUnformatted(fmt.Sprintf("%d", m.Silver))
-            imgui.TableNextColumn()
-            imgui.TextUnformatted(fmt.Sprintf("%d", m.Bronze))
-            imgui.TableNextColumn()
-            imgui.TextUnformatted(fmt.Sprintf("%d", m.Total))
-        })
+    return nil
 }
+
+func processTeams() {
+	uiState.teamsListProcessed = make([]*Team, 0, len(uiState.teamsList))
+
+	for i := range uiState.teamsList {
+		t := &uiState.teamsList[i]
+		if len(uiState.teamNameFilter) > 0 && !strings.Contains(t.Name, uiState.teamNameFilter) {
+			continue
+		}
+		uiState.teamsListProcessed = append(uiState.teamsListProcessed, t)
+	}
+}
+
 func showTeams(switched bool) {
 	if switched {
 		uiState.teamsList, _ = getTeams()
@@ -987,7 +1041,6 @@ func runUI() {
 		imgui.EndTabBar()
 	}
 
-	// hack
 	if uiState.hasError {
 		imgui.OpenPopupStr("Ошибка")
 		uiState.hasError = false
