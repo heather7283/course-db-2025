@@ -47,14 +47,8 @@ type Competition struct {
 	ID int
 	Time time.Time
 
-	SportCode string
 	Sport Sport
-
-	SiteID string
 	Site Site
-
-	Athletes []Athlete
-	Teams []Team
 }
 
 //go:embed schema.sql
@@ -304,6 +298,62 @@ func addAthleteToTeam(teamID int, athleteID int) error {
 
 func deleteAthleteFromTeam(teamID int, athleteID int) error {
 	_, err := db.Exec("DELETE FROM team_members WHERE team_id = ? AND athlete_id = ?;", teamID, athleteID)
+	return err
+}
+
+func getCompetitions() ([]Competition, error) {
+	var competitions []Competition
+
+	rows, err := db.Query(`
+		SELECT comp.id, comp.time,
+		       s.code, s.name, s.is_team,
+		       st.id, st.name
+		FROM competitions comp
+		JOIN sports s ON s.code = comp.sport_code
+		JOIN sites st ON st.id = comp.site_id
+		ORDER BY comp.time;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		c := Competition{}
+
+		err := rows.Scan(
+			&c.ID,
+			&c.Time,
+			&c.Sport.Code,
+			&c.Sport.Name,
+			&c.Sport.IsTeam,
+			&c.Site.ID,
+			&c.Site.Name,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		competitions = append(competitions, c)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return competitions, nil
+}
+
+func addCompetition(t time.Time, sportCode string, siteID int) error {
+	_, err := db.Exec(`
+		INSERT INTO competitions (time, sport_code, site_id)
+		VALUES (?, ?, ?);
+	`, t.Unix(), sportCode, siteID)
+	return err
+}
+
+func deleteCompetition(ID int) error {
+	_, err := db.Exec("DELETE FROM competitions WHERE id = ?;", ID)
 	return err
 }
 

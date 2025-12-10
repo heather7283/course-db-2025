@@ -13,13 +13,14 @@ type Tab int
 
 const (
 	TabCountries Tab = iota
-	TabSports Tab = iota
-	TabAthletes Tab = iota
-	TabSites Tab = iota
-	TabTeams Tab = iota
+	TabSports
+	TabAthletes
+	TabSites
+	TabTeams
+	TabCompetitions
 )
 
-var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes, TabSites, TabTeams}
+var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes, TabSites, TabTeams, TabCompetitions}
 
 var uiState struct {
 	oldTab Tab
@@ -73,6 +74,16 @@ var uiState struct {
 	teamSportInput Sport
 	teamMemberSelection map[int]int
 
+	competitionsDirty bool
+	competitionsList []Competition
+	competitionsListProcessed []*Competition
+	competitionDateInput string
+	competitionTimeInput string
+	competitionSportInput Sport
+	competitionSiteInput Site
+	competitionFilterSport Sport
+	competitionFilterSite  Site
+
 	hasError bool
 	error string
 }
@@ -89,6 +100,7 @@ func (tab Tab) name() string {
 	case TabAthletes: return "Спортсмены"
 	case TabSites: return "Места проведения"
 	case TabTeams: return "Команды"
+	case TabCompetitions: return "Соревнования"
 	default: return "INVALID TAB"
 	}
 }
@@ -106,6 +118,7 @@ func (tab Tab) show() {
 	case TabAthletes: showAthletes(switched)
 	case TabSites: showSites(switched)
 	case TabTeams: showTeams(switched)
+	case TabCompetitions: showCompetitions(switched)
 	default: showError(fmt.Errorf("INVALID TAB"))
 	}
 }
@@ -132,6 +145,123 @@ func showTable[T any](id string, headers []string, items []T, callback func(item
 		}
 		imgui.EndTable()
 	}
+}
+
+func processCompetitions() {
+	uiState.competitionsListProcessed = make([]*Competition, 0, len(uiState.competitionsList))
+	for i := range uiState.competitionsList {
+		c := &uiState.competitionsList[i]
+		if uiState.competitionFilterSport.Code != "" &&
+			uiState.competitionFilterSport.Code != c.Sport.Code {
+			continue
+		}
+		if uiState.competitionFilterSite.ID != 0 &&
+			uiState.competitionFilterSite.ID != c.Site.ID {
+			continue
+		}
+		uiState.competitionsListProcessed = append(uiState.competitionsListProcessed, c)
+	}
+}
+
+func showCompetitions(switched bool) {
+	if switched {
+		uiState.competitionsList, _ = getCompetitions()
+		uiState.competitionsDirty = true
+	}
+
+	avail := imgui.ContentRegionAvail()
+
+	imgui.SetNextItemWidth(avail.X / 5)
+	imgui.InputTextWithHint("##compDate", "Дата (YYYY-MM-DD)", &uiState.competitionDateInput, 0, nil)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 5)
+	imgui.InputTextWithHint("##compTime", "Время (HH:MM)", &uiState.competitionTimeInput, 0, nil)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 5)
+	pickSport(&uiState.competitionSportInput, "##pickSportCombo")
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 5)
+	pickSite(&uiState.competitionSiteInput, "##pickSiteCombo")
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 5)
+	if imgui.Button("Добавить") {
+
+		if uiState.competitionDateInput == "" || uiState.competitionTimeInput == "" {
+			showError(fmt.Errorf("Введите дату и время"))
+		} else {
+			t, err := time.Parse("2006-01-02 15:04",
+				uiState.competitionDateInput+" "+uiState.competitionTimeInput)
+
+			if err != nil {
+				showError(err)
+			} else {
+				err = addCompetition(t, uiState.competitionSportInput.Code, uiState.competitionSiteInput.ID)
+				if err != nil {
+					showError(err)
+				} else {
+					uiState.competitionsList, _ = getCompetitions()
+					uiState.competitionsDirty = true
+				}
+			}
+		}
+	}
+
+	imgui.Separator()
+
+	imgui.Text("Фильтр")
+
+	imgui.Text("Спорт")
+	imgui.SetNextItemWidth(avail.X / 3)
+	imgui.SameLine()
+	if pickSport(&uiState.competitionFilterSport, "##pickSportComboFilter") {
+		uiState.competitionsDirty = true
+	}
+	imgui.SameLine()
+	if imgui.Button("x##clearSportFilter") {
+		uiState.competitionFilterSport = Sport{}
+		uiState.competitionsDirty = true
+	}
+
+	imgui.Text("Место")
+	imgui.SetNextItemWidth(avail.X / 3)
+	imgui.SameLine()
+	if pickSite(&uiState.competitionFilterSite, "##pickSiteComboFilter") {
+		uiState.competitionsDirty = true
+	}
+	imgui.SameLine()
+	if imgui.Button("x##clearSiteFilter") {
+		uiState.competitionFilterSite = Site{}
+		uiState.competitionsDirty = true
+	}
+
+	if uiState.competitionsDirty {
+		uiState.competitionsDirty = false
+		processCompetitions()
+	}
+
+	showTable("##competitionsTable",
+		[]string{"", "Дата и время", "Вид спорта", "Место"},
+		uiState.competitionsListProcessed,
+		func(c *Competition) {
+
+			imgui.TableNextRow()
+
+			imgui.TableNextColumn()
+			if imgui.Button("x") {
+				deleteCompetition(c.ID)
+				uiState.competitionsList, _ = getCompetitions()
+				uiState.competitionsDirty = true
+			}
+
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(c.Time.Format("2006-01-02 15:04"))
+
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(c.Sport.Name)
+
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(c.Site.Name)
+		})
 }
 
 func processSites() {
@@ -231,30 +361,32 @@ func pickCountry(country *Country) {
 	}
 }
 
-func pickSite(site *Site) {
-	if imgui.BeginCombo("##pickSiteCombo", site.Name) {
+func pickSite(site *Site, id string) bool {
+	if imgui.BeginCombo(id, site.Name) {
 		defer imgui.EndCombo()
 		sites, _ := getSites()
 		for _, s := range sites {
 			if (imgui.SelectableBool(s.Name)) {
 				*site = s
-				return
+				return true
 			}
 		}
 	}
+	return false
 }
 
-func pickSport(sport *Sport) {
-	if imgui.BeginCombo("##pickSportCombo", sport.Name) {
+func pickSport(sport *Sport, id string) bool {
+	if imgui.BeginCombo(id, sport.Name) {
 		defer imgui.EndCombo()
 		sports, _ := getSports()
 		for _, s := range sports {
 			if (imgui.SelectableBool(s.Name)) {
 				*sport = s
-				return
+				return true
 			}
 		}
 	}
+	return false
 }
 
 func showAthletes(switched bool) {
@@ -629,7 +761,7 @@ func showTeams(switched bool) {
 	pickCountry(&uiState.teamCountryInput)
 	imgui.SameLine()
 	imgui.SetNextItemWidth(avail.X / 4)
-	pickSport(&uiState.teamSportInput)
+	pickSport(&uiState.teamSportInput, "##pickSportCombo")
 	imgui.SameLine()
 	imgui.SetNextItemWidth(avail.X / 1)
 	if imgui.Button("Добавить") {
