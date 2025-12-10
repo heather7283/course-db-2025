@@ -375,9 +375,31 @@ func showSports(switched bool) {
 		})
 }
 
+func processCountries() {
+	uiState.countriesListProcessed = make([]*Country, 0, len(uiState.countriesList))
+
+	for i := range uiState.countriesList {
+		c := &uiState.countriesList[i]
+		if len(uiState.countryCodeFilter) > 0 && !strings.Contains(c.Code, uiState.countryCodeFilter) {
+			continue
+		}
+		if len(uiState.countryNameFilter) > 0 && !strings.Contains(c.Name, uiState.countryNameFilter) {
+			continue
+		}
+		uiState.countriesListProcessed = append(uiState.countriesListProcessed, c)
+	}
+
+	if uiState.countriesSortFunc != nil {
+		sort.Slice(uiState.countriesListProcessed, func(i, j int) bool {
+			return uiState.countriesSortFunc(uiState.countriesListProcessed[i], uiState.countriesListProcessed[j])
+		})
+	}
+}
+
 func showCountries(switched bool) {
 	if switched {
 		uiState.countriesList, _ = getCountries()
+		uiState.countriesDirty = true
 	}
 
 	avail := imgui.ContentRegionAvail()
@@ -393,32 +415,58 @@ func showCountries(switched bool) {
 			showError(err)
 		} else {
 			uiState.countriesList, _ = getCountries()
+			uiState.countriesDirty = true
 		}
 	}
 
-	if imgui.BeginTableV("##countriesTable", 3, tableFlags, imgui.Vec2{}, 0) {
-		imgui.TableSetupColumn("")
-		imgui.TableSetupColumn("Код")
-		imgui.TableSetupColumn("Название")
-		imgui.TableHeadersRow()
-		for i, c := range uiState.countriesList {
-			imgui.PushIDInt(int32(i))
+	imgui.Separator()
+	imgui.TextUnformatted("Фильтр")
 
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	if imgui.InputTextWithHint("##countryCodeFilter", "Код", &uiState.countryCodeFilter, 0, nil) {
+		uiState.countriesDirty = true
+	}
+
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	if imgui.InputTextWithHint("##countryNameFilter", "Название", &uiState.countryNameFilter, 0, nil) {
+		uiState.countriesDirty = true
+	}
+
+	imgui.TextUnformatted("Сортировка")
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Код##countriesSort", &uiState.countriesSortSwitch, 1) {
+		uiState.countriesSortFunc = func(a *Country, b *Country) bool {
+			return a.Code < b.Code
+		}
+		uiState.countriesDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Название##countriesSort", &uiState.countriesSortSwitch, 2) {
+		uiState.countriesSortFunc = func(a *Country, b *Country) bool {
+			return a.Name < b.Name
+		}
+		uiState.countriesDirty = true
+	}
+
+	if uiState.countriesDirty {
+		uiState.countriesDirty = false
+		processCountries()
+	}
+
+	showTable("##countriesTable", []string{"", "Код", "Название"},
+		uiState.countriesListProcessed, func(c *Country) {
 			imgui.TableNextRow()
 			imgui.TableNextColumn()
-			if (imgui.Button("x")) {
+			if imgui.Button("x") {
 				deleteCountry(c.Code)
 				uiState.countriesList, _ = getCountries()
+				uiState.countriesDirty = true
 			}
 			imgui.TableNextColumn()
-			imgui.Text(c.Code)
+			imgui.TextUnformatted(c.Code)
 			imgui.TableNextColumn()
-			imgui.Text(c.Name)
-
-			imgui.PopID()
-		}
-		imgui.EndTable()
-	}
+			imgui.TextUnformatted(c.Name)
+		})
 }
 
 func runUI() {
