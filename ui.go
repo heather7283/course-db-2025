@@ -16,9 +16,10 @@ const (
 	TabSports Tab = iota
 	TabAthletes Tab = iota
 	TabSites Tab = iota
+	TabTeams Tab = iota
 )
 
-var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes, TabSites}
+var tabs []Tab = []Tab{TabCountries, TabSports, TabAthletes, TabSites, TabTeams}
 
 var uiState struct {
 	oldTab Tab
@@ -63,6 +64,15 @@ var uiState struct {
 	siteNameInput string
 	siteNameFilter string
 
+	teamsDirty bool
+	teamsList []Team
+	teamsListProcessed []*Team
+	teamNameInput string
+	teamNameFilter string
+	teamCountryInput Country
+	teamSportInput Sport
+	teamMemberSelection map[int]int
+
 	hasError bool
 	error string
 }
@@ -78,6 +88,7 @@ func (tab Tab) name() string {
 	case TabSports: return "Виды спорта"
 	case TabAthletes: return "Спортсмены"
 	case TabSites: return "Места проведения"
+	case TabTeams: return "Команды"
 	default: return "INVALID TAB"
 	}
 }
@@ -94,6 +105,7 @@ func (tab Tab) show() {
 	case TabSports: showSports(switched)
 	case TabAthletes: showAthletes(switched)
 	case TabSites: showSites(switched)
+	case TabTeams: showTeams(switched)
 	default: showError(fmt.Errorf("INVALID TAB"))
 	}
 }
@@ -588,6 +600,133 @@ func showCountries(switched bool) {
 		})
 }
 
+func processTeams() {
+	uiState.teamsListProcessed = make([]*Team, 0, len(uiState.teamsList))
+
+	for i := range uiState.teamsList {
+		t := &uiState.teamsList[i]
+		if len(uiState.teamNameFilter) > 0 && !strings.Contains(t.Name, uiState.teamNameFilter) {
+			continue
+		}
+		uiState.teamsListProcessed = append(uiState.teamsListProcessed, t)
+	}
+}
+
+func showTeams(switched bool) {
+	if switched {
+		uiState.teamsList, _ = getTeams()
+		uiState.teamsDirty = true
+		if uiState.teamMemberSelection == nil {
+			uiState.teamMemberSelection = make(map[int]int)
+		}
+	}
+
+	avail := imgui.ContentRegionAvail()
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.InputTextWithHint("##teamNameInput", "Название команды", &uiState.teamNameInput, 0, nil)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	pickCountry(&uiState.teamCountryInput)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	pickSport(&uiState.teamSportInput)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 1)
+	if imgui.Button("Добавить") {
+		err := addTeam(uiState.teamNameInput, uiState.teamCountryInput.Code, uiState.teamSportInput.Code)
+		if err != nil {
+			showError(err)
+		} else {
+			uiState.teamsList, _ = getTeams()
+			uiState.teamsDirty = true
+		}
+	}
+
+	imgui.Separator()
+	imgui.TextUnformatted("Фильтр")
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	if imgui.InputTextWithHint("##teamNameFilter", "Название", &uiState.teamNameFilter, 0, nil) {
+		uiState.teamsDirty = true
+	}
+
+	if uiState.teamsDirty {
+		uiState.teamsDirty = false
+		processTeams()
+	}
+
+	// We'll need the list of all athletes for the "add member" comboboxes
+	allAthletes, _ := getAthletes()
+
+	showTable("##teamsTable", []string{"", "Название", "Страна", "Вид спорта", "Участники"},
+		uiState.teamsListProcessed, func(t *Team) {
+			imgui.TableNextRow()
+			imgui.TableNextColumn()
+			if imgui.Button("x") {
+				deleteTeam(t.ID)
+				uiState.teamsList, _ = getTeams()
+				uiState.teamsDirty = true
+			}
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(t.Name)
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(t.Country.Name)
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(t.Sport.Name)
+			imgui.TableNextColumn()
+
+			label := fmt.Sprintf("members_%d", t.ID)
+			countLabel := fmt.Sprintf("Участники (%d)", len(t.Members))
+			if imgui.TreeNodeStr(fmt.Sprintf("%s##%s", countLabel, label)) {
+				for i := range t.Members {
+					m := t.Members[i]
+					if imgui.Button(fmt.Sprintf("X##%d_%d", t.ID, m.ID)) {
+						if err := deleteAthleteFromTeam(t.ID, m.ID); err != nil {
+							showError(err)
+						} else {
+							uiState.teamsList, _ = getTeams()
+							uiState.teamsDirty = true
+						}
+					}
+					imgui.SameLine()
+					imgui.TextUnformatted(m.Name)
+				}
+				if imgui.Button(fmt.Sprintf("Добавить##add_%d", t.ID)) {
+					sel := uiState.teamMemberSelection[t.ID]
+					if sel == 0 {
+						showError(fmt.Errorf("Не выбран спортсмен"))
+					} else {
+						if err := addAthleteToTeam(t.ID, sel); err != nil {
+							showError(err)
+						} else {
+							uiState.teamsList, _ = getTeams()
+							uiState.teamsDirty = true
+						}
+					}
+				}
+				imgui.SameLine()
+				comboLabel := fmt.Sprintf("##addMemberCombo%d", t.ID)
+				selectedID := uiState.teamMemberSelection[t.ID]
+				selectedName := "Выберите спортсмена"
+				for _, a := range allAthletes {
+					if a.ID == selectedID {
+						selectedName = a.Name
+						break
+					}
+				}
+				if imgui.BeginCombo(comboLabel, selectedName) {
+					for _, a := range allAthletes {
+						if imgui.SelectableBool(a.Name) {
+							uiState.teamMemberSelection[t.ID] = a.ID
+						}
+					}
+					imgui.EndCombo()
+				}
+				imgui.TreePop()
+			}
+		})
+}
+
 func runUI() {
 	imgui.SetNextWindowPos(imgui.Vec2{X: 0, Y: 0})
 	imgui.SetNextWindowSize(imgui.CurrentIO().DisplaySize())
@@ -621,4 +760,6 @@ func runUI() {
 
 func initUI() {
 	uiState.oldTab = 100500
+	uiState.teamMemberSelection = make(map[int]int)
 }
+

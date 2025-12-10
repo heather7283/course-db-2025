@@ -32,10 +32,7 @@ type Team struct {
 	ID int
 	Name string
 
-	CountryCode string
 	Country Country
-
-	SportCode string
 	Sport Sport
 
 	Members []Athlete
@@ -217,6 +214,96 @@ func addSite(name string) error {
 
 func deleteSite(ID int) error {
 	_, err := db.Exec("DELETE FROM sites WHERE id = ?;", ID)
+	return err
+}
+
+func getTeams() ([]Team, error) {
+	var teams []Team
+
+	rows, err := db.Query(`
+		SELECT t.id, t.name,
+		       c.code, c.name,
+		       s.code, s.name, s.is_team
+		FROM teams t
+		JOIN countries c ON c.code = t.country_code
+		JOIN sports s ON s.code = t.sport_code
+		ORDER BY t.id;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		team := Team{}
+		country := Country{}
+		sport := Sport{}
+
+		err := rows.Scan(&team.ID, &team.Name, &country.Code, &country.Name, &sport.Code, &sport.Name, &sport.IsTeam)
+		if err != nil {
+			return nil, err
+		}
+
+		team.Country = country
+		team.Sport = sport
+
+		memberRows, err := db.Query(`
+			SELECT a.id, a.name, a.gender, a.birthday, c2.name
+			FROM team_members tm
+			JOIN athletes a ON a.id = tm.athlete_id
+			JOIN countries c2 ON c2.code = a.country_code
+			WHERE tm.team_id = ?;
+		`, team.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		var members []Athlete
+		for memberRows.Next() {
+			athlete := Athlete{}
+			err := memberRows.Scan(&athlete.ID, &athlete.Name, &athlete.Gender,
+				&athlete.Birthday, &athlete.CountryName)
+			if err != nil {
+				memberRows.Close()
+				return nil, err
+			}
+			members = append(members, athlete)
+		}
+		memberRows.Close()
+
+		if err = memberRows.Err(); err != nil {
+			return nil, err
+		}
+
+		team.Members = members
+		teams = append(teams, team)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return teams, nil
+}
+
+func addTeam(name string, countryCode string, sportCode string) error {
+	_, err := db.Exec("INSERT INTO teams (name, country_code, sport_code) VALUES (?, ?, ?);",
+		name, countryCode, sportCode)
+	return err
+}
+
+func deleteTeam(ID int) error {
+	_, err := db.Exec("DELETE FROM teams WHERE id = ?;", ID)
+	return err
+}
+
+func addAthleteToTeam(teamID int, athleteID int) error {
+	_, err := db.Exec("INSERT INTO team_members (team_id, athlete_id) VALUES (?, ?);", teamID, athleteID)
+	return err
+}
+
+func deleteAthleteFromTeam(teamID int, athleteID int) error {
+	_, err := db.Exec("DELETE FROM team_members WHERE team_id = ? AND athlete_id = ?;", teamID, athleteID)
 	return err
 }
 
