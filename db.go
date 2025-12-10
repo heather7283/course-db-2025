@@ -114,3 +114,36 @@ func deleteCountry(code string) error {
 	return err
 }
 
+func getSports() ([]Sport, error) {
+	var sports []Sport
+
+	rows, err := db.Query("SELECT code, name, is_team FROM sports;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		sport := Sport{}
+		if err := rows.Scan(&sport.Code, &sport.Name, &sport.IsTeam); err != nil {
+			return nil, err
+		}
+		sports = append(sports, sport)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return sports, nil
+}
+
+func addSport(code string, name string, team bool) error {
+	_, err := db.Exec("INSERT INTO sports ( code, name, is_team ) VALUES ( ?, ?, ? );", code, name, team)
+	return err
+}
+
+func deleteSport(code string) error {
+	_, err := db.Exec("DELETE FROM sports WHERE code = ?;", code)
+	return err
+}
+

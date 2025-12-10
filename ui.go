@@ -1,22 +1,127 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/AllenDang/cimgui-go/imgui"
 )
 
+type Tab int
+
+const (
+	TabCountries Tab = iota
+	TabSports Tab = iota
+)
+
+var tabs []Tab = []Tab{TabCountries, TabSports}
+
 var uiState struct {
+	oldTab Tab
+
 	countriesOpened bool
 	countriesList []Country
 	countryCodeInput string
 	countryNameInput string
 
+	sportsOpened bool
+	sportsList []Sport
+	sportCodeInput string
+	sportNameInput string
+	sportIsTeamInput bool
+
 	hasError bool
 	error string
 }
 
-func showCountries() {
-	if !uiState.countriesOpened {
-		uiState.countriesOpened = true
+var tableFlags imgui.TableFlags =
+	imgui.TableFlagsBordersOuter|imgui.TableFlagsBordersInner|imgui.TableFlagsRowBg|
+	imgui.TableFlagsScrollY|imgui.TableFlagsScrollX|imgui.TableFlagsResizable|
+	imgui.TableFlagsHighlightHoveredColumn;
+
+func (tab Tab) name() string {
+	switch tab {
+	case TabCountries: return "Страны"
+	case TabSports: return "Виды спорта"
+	default: return "INVALID TAB"
+	}
+}
+
+func (tab Tab) show() {
+	switched := false
+	if uiState.oldTab != tab {
+		switched = true
+		uiState.oldTab = tab
+	}
+
+	switch tab {
+	case TabCountries: showCountries(switched)
+	case TabSports: showSports(switched)
+	default: showError(fmt.Errorf("INVALID TAB"))
+	}
+}
+
+func showError(err error) {
+	uiState.hasError = true
+	uiState.error = err.Error()
+}
+
+func showSports(switched bool) {
+	if switched {
+		uiState.sportsList, _ = getSports()
+	}
+
+	avail := imgui.ContentRegionAvail()
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.InputTextWithHint("##sportCodeInput", "Код вида спорта", &uiState.sportCodeInput, 0, nil)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.InputTextWithHint("##sportNameInput", "Название вида спорта", &uiState.sportNameInput, 0, nil)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.Checkbox("Командный", &uiState.sportIsTeamInput)
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 1)
+	if imgui.Button("Добавить") {
+		if err := addSport(uiState.countryCodeInput, uiState.countryNameInput, uiState.sportIsTeamInput); err != nil {
+			showError(err)
+		} else {
+			uiState.sportsList, _ = getSports()
+		}
+	}
+
+	if imgui.BeginTableV("##sportsTable", 4, tableFlags, imgui.Vec2{}, 0) {
+		imgui.TableSetupColumn("")
+		imgui.TableSetupColumn("Код")
+		imgui.TableSetupColumn("Название")
+		imgui.TableSetupColumn("Командный/одиночный")
+		imgui.TableHeadersRow()
+		for i, s := range uiState.sportsList {
+			imgui.PushIDInt(int32(i))
+
+			imgui.TableNextRow()
+			imgui.TableNextColumn()
+			if (imgui.Button("x")) {
+				deleteSport(s.Code)
+				uiState.sportsList, _ = getSports()
+			}
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(s.Code)
+			imgui.TableNextColumn()
+			imgui.TextUnformatted(s.Name)
+			imgui.TableNextColumn()
+			switch s.IsTeam{
+			case true: imgui.TextUnformatted("Командный")
+			case false: imgui.TextUnformatted("Одиночный")
+			}
+
+			imgui.PopID()
+		}
+		imgui.EndTable()
+	}
+}
+
+func showCountries(switched bool) {
+	if switched {
 		uiState.countriesList, _ = getCountries()
 	}
 
@@ -30,16 +135,17 @@ func showCountries() {
 	imgui.SetNextItemWidth(avail.X / 1)
 	if imgui.Button("Добавить") {
 		if err := addCountry(uiState.countryCodeInput, uiState.countryNameInput); err != nil {
-			uiState.hasError = true
-			uiState.error = err.Error()
+			showError(err)
 		} else {
 			uiState.countriesList, _ = getCountries()
 		}
 	}
 
-	tableFlags := imgui.TableFlagsBordersOuter|imgui.TableFlagsBordersInner|imgui.TableFlagsRowBg|imgui.TableFlagsScrollY|imgui.TableFlagsScrollX;
 	if imgui.BeginTableV("##countriesTable", 3, tableFlags, imgui.Vec2{}, 0) {
-		defer imgui.EndTable()
+		imgui.TableSetupColumn("")
+		imgui.TableSetupColumn("Код")
+		imgui.TableSetupColumn("Название")
+		imgui.TableHeadersRow()
 		for i, c := range uiState.countriesList {
 			imgui.PushIDInt(int32(i))
 
@@ -56,6 +162,7 @@ func showCountries() {
 
 			imgui.PopID()
 		}
+		imgui.EndTable()
 	}
 }
 
@@ -66,23 +173,12 @@ func runUI() {
 
 
 	if imgui.BeginTabBar("##tabBar") {
-		if imgui.BeginTabItem("Страны") {
-			showCountries()
-			imgui.EndTabItem()
+		for _, tab := range tabs {
+			if imgui.BeginTabItem(tab.name()) {
+				tab.show()
+				imgui.EndTabItem()
+			}
 		}
-		if imgui.BeginTabItem("Виды спорта") {
-			imgui.EndTabItem()
-		}
-		if imgui.BeginTabItem("Атлеты") {
-			imgui.EndTabItem()
-		}
-		if imgui.BeginTabItem("Команды") {
-			imgui.EndTabItem()
-		}
-		if imgui.BeginTabItem("Площадки") {
-			imgui.EndTabItem()
-		}
-
 		imgui.EndTabBar()
 	}
 
@@ -103,6 +199,7 @@ func runUI() {
 }
 
 func initUI() {
+	uiState.oldTab = 100500
 	uiState.countriesOpened = false
 }
 
