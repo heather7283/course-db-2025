@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 )
@@ -31,6 +32,8 @@ var uiState struct {
 	athletesList []Athlete
 	athleteNameInput string
 	athleteIsMaleInput bool
+	athleteNameFilter string
+	athleteGenderFilter int32
 
 	hasError bool
 	error string
@@ -70,6 +73,27 @@ func showError(err error) {
 	uiState.error = err.Error()
 }
 
+func showTable[T any](id string, headers []string, items []T, filter func(item *T) bool, callback func(item *T)) {
+	cols := len(headers)
+	if imgui.BeginTableV(id, int32(cols), tableFlags, imgui.Vec2{}, 0) {
+		imgui.TableSetupScrollFreeze(1, 1)
+
+		for _, header := range headers {
+			imgui.TableSetupColumn(header)
+		}
+		imgui.TableHeadersRow()
+
+		for i := range items {
+			if (filter(&items[i])) {
+				imgui.PushIDInt(int32(i))
+				callback(&items[i])
+				imgui.PopID()
+			}
+		}
+		imgui.EndTable()
+	}
+}
+
 func showAthletes(switched bool) {
 	if switched {
 		uiState.athletesList, _ = getAthletes()
@@ -97,21 +121,33 @@ func showAthletes(switched bool) {
 	//	}
 	//}
 
-	if imgui.BeginTableV("##athletesTable", 5, tableFlags, imgui.Vec2{}, 0) {
-		imgui.TableSetupColumn("")
-		imgui.TableSetupColumn("Имя")
-		imgui.TableSetupColumn("Пол")
-		imgui.TableSetupColumn("День рождения")
-		imgui.TableSetupColumn("Страна")
-		imgui.TableHeadersRow()
-		for i, a := range uiState.athletesList {
+	avail := imgui.ContentRegionAvail()
+	imgui.TextUnformatted("Фильтр"); imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	imgui.InputTextWithHint("##athleteNameFilter", "Имя", &uiState.athleteNameFilter, 0, nil); imgui.SameLine()
+	imgui.RadioButtonIntPtr("Все", &uiState.athleteGenderFilter, 0); imgui.SameLine()
+	imgui.RadioButtonIntPtr("М", &uiState.athleteGenderFilter, 1); imgui.SameLine()
+	imgui.RadioButtonIntPtr("Ж", &uiState.athleteGenderFilter, 2)
+
+	showTable("##athletesTable", []string{ "", "Имя", "Пол", "День рождения", "Страна" }, uiState.athletesList,
+		func(a *Athlete) bool {
+			if (len(uiState.athleteNameFilter) > 0 && !strings.Contains(a.Name, uiState.athleteNameFilter)) {
+				return false
+			}
+			if (uiState.athleteGenderFilter > 0) {
+				if (uiState.athleteGenderFilter == 1 && a.Gender != "M" ||
+					uiState.athleteGenderFilter == 2 && a.Gender != "F") {
+					return false
+				}
+			}
+			return true
+		}, func(a *Athlete) {
 			var gender string
 			if a.Gender == "M" {
 				gender = "М"
 			} else {
 				gender = "Ж"
 			}
-			imgui.PushIDInt(int32(i))
 
 			imgui.TableNextRow()
 			imgui.TableNextColumn()
@@ -127,11 +163,7 @@ func showAthletes(switched bool) {
 			imgui.TextUnformatted(a.Birthday.String())
 			imgui.TableNextColumn()
 			imgui.TextUnformatted(a.CountryName)
-
-			imgui.PopID()
-		}
-		imgui.EndTable()
-	}
+		})
 }
 
 func showSports(switched bool) {
