@@ -24,11 +24,24 @@ var uiState struct {
 	countriesList []Country
 	countryCodeInput string
 	countryNameInput string
+	countriesDirty bool
+	countriesSortSwitch int32
+	countriesSortFunc func(a *Country, b *Country) bool
+	countriesListProcessed []*Country
+	countryCodeFilter string
+	countryNameFilter string
 
 	sportsList []Sport
 	sportCodeInput string
 	sportNameInput string
 	sportIsTeamInput bool
+	sportsDirty bool
+	sportsSortSwitch int32
+	sportsSortFunc func(a *Sport, b *Sport) bool
+	sportsListProcessed []*Sport
+	sportCodeFilter string
+	sportNameFilter string
+	sportTeamFilter int32 // 0 = все, 1 = командные, 2 = одиночные
 
 	athletesDirty bool
 	athletesSortSwitch int32
@@ -149,6 +162,8 @@ func showAthletes(switched bool) {
 	//	}
 	//}
 
+	imgui.Separator()
+
 	avail := imgui.ContentRegionAvail()
 	imgui.TextUnformatted("Фильтр")
 
@@ -226,9 +241,37 @@ func showAthletes(switched bool) {
 		})
 }
 
+func processSports() {
+	uiState.sportsListProcessed = make([]*Sport, 0, len(uiState.sportsList))
+
+	for i := range uiState.sportsList {
+		s := &uiState.sportsList[i]
+		if len(uiState.sportCodeFilter) > 0 && !strings.Contains(s.Code, uiState.sportCodeFilter) {
+			continue
+		}
+		if len(uiState.sportNameFilter) > 0 && !strings.Contains(s.Name, uiState.sportNameFilter) {
+			continue
+		}
+		if uiState.sportTeamFilter > 0 {
+			if (uiState.sportTeamFilter == 1 && !s.IsTeam) ||
+				(uiState.sportTeamFilter == 2 && s.IsTeam) {
+				continue
+			}
+		}
+		uiState.sportsListProcessed = append(uiState.sportsListProcessed, s)
+	}
+
+	if uiState.sportsSortFunc != nil {
+		sort.Slice(uiState.sportsListProcessed, func(i, j int) bool {
+			return uiState.sportsSortFunc(uiState.sportsListProcessed[i], uiState.sportsListProcessed[j])
+		})
+	}
+}
+
 func showSports(switched bool) {
 	if switched {
 		uiState.sportsList, _ = getSports()
+		uiState.sportsDirty = true
 	}
 
 	avail := imgui.ContentRegionAvail()
@@ -243,42 +286,93 @@ func showSports(switched bool) {
 	imgui.SameLine()
 	imgui.SetNextItemWidth(avail.X / 1)
 	if imgui.Button("Добавить") {
-		if err := addSport(uiState.countryCodeInput, uiState.countryNameInput, uiState.sportIsTeamInput); err != nil {
+		err := addSport(uiState.sportCodeInput, uiState.sportNameInput, uiState.sportIsTeamInput)
+		if err != nil {
 			showError(err)
 		} else {
 			uiState.sportsList, _ = getSports()
+			uiState.sportsDirty = true
 		}
 	}
 
-	if imgui.BeginTableV("##sportsTable", 4, tableFlags, imgui.Vec2{}, 0) {
-		imgui.TableSetupColumn("")
-		imgui.TableSetupColumn("Код")
-		imgui.TableSetupColumn("Название")
-		imgui.TableSetupColumn("Командный/одиночный")
-		imgui.TableHeadersRow()
-		for i, s := range uiState.sportsList {
-			imgui.PushIDInt(int32(i))
+	imgui.Separator()
+	imgui.TextUnformatted("Фильтр")
 
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	if imgui.InputTextWithHint("##sportCodeFilter", "Код", &uiState.sportCodeFilter, 0, nil) {
+		uiState.sportsDirty = true
+	}
+
+	imgui.SameLine()
+	imgui.SetNextItemWidth(avail.X / 4)
+	if imgui.InputTextWithHint("##sportNameFilter", "Название", &uiState.sportNameFilter, 0, nil) {
+		uiState.sportsDirty = true
+	}
+
+	imgui.SameLine()
+	if imgui.RadioButtonIntPtr("Все##sportTeamFilter", &uiState.sportTeamFilter, 0) {
+		uiState.sportsDirty = true
+	}
+	imgui.SameLine()
+	if imgui.RadioButtonIntPtr("Командные##sportTeamFilter", &uiState.sportTeamFilter, 1) {
+		uiState.sportsDirty = true
+	}
+	imgui.SameLine()
+	if imgui.RadioButtonIntPtr("Одиночные##sportTeamFilter", &uiState.sportTeamFilter, 2) {
+		uiState.sportsDirty = true
+	}
+
+	imgui.TextUnformatted("Сортировка")
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Код##sportsSort", &uiState.sportsSortSwitch, 1) {
+		uiState.sportsSortFunc = func(a *Sport, b *Sport) bool {
+			return a.Code < b.Code
+		}
+		uiState.sportsDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Название##sportsSort", &uiState.sportsSortSwitch, 2) {
+		uiState.sportsSortFunc = func(a *Sport, b *Sport) bool {
+			return a.Name < b.Name
+		}
+		uiState.sportsDirty = true
+	}
+	if imgui.SameLine(); imgui.RadioButtonIntPtr("Тип##sportsSort", &uiState.sportsSortSwitch, 3) {
+		uiState.sportsSortFunc = func(a *Sport, b *Sport) bool {
+			if a.IsTeam && !b.IsTeam {
+				return true
+			} else if !a.IsTeam && b.IsTeam {
+				return false
+			}
+			return a.Name < b.Name
+		}
+		uiState.sportsDirty = true
+	}
+
+	if uiState.sportsDirty {
+		uiState.sportsDirty = false
+		processSports()
+	}
+
+	showTable("##sportsTable", []string{"", "Код", "Название", "Тип"},
+		uiState.sportsListProcessed, func(s *Sport) {
 			imgui.TableNextRow()
 			imgui.TableNextColumn()
-			if (imgui.Button("x")) {
+			if imgui.Button("x") {
 				deleteSport(s.Code)
 				uiState.sportsList, _ = getSports()
+				uiState.sportsDirty = true
 			}
 			imgui.TableNextColumn()
 			imgui.TextUnformatted(s.Code)
 			imgui.TableNextColumn()
 			imgui.TextUnformatted(s.Name)
 			imgui.TableNextColumn()
-			switch s.IsTeam{
-			case true: imgui.TextUnformatted("Командный")
-			case false: imgui.TextUnformatted("Одиночный")
+			if s.IsTeam {
+				imgui.TextUnformatted("Командный")
+			} else {
+				imgui.TextUnformatted("Одиночный")
 			}
-
-			imgui.PopID()
-		}
-		imgui.EndTable()
-	}
+		})
 }
 
 func showCountries(switched bool) {
