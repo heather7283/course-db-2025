@@ -136,6 +136,19 @@ func processAthletes() {
 	}
 }
 
+func pickCountry(country *Country) {
+	if imgui.BeginCombo("##pickCountryCombo", country.Name) {
+		defer imgui.EndCombo()
+		countries, _ := getCountries()
+		for _, c := range countries {
+			if (imgui.SelectableBool(c.Name)) {
+				*country = c
+				return
+			}
+		}
+	}
+}
+
 func showAthletes(switched bool) {
 	if switched {
 		uiState.athletesList, _ = getAthletes()
@@ -156,16 +169,7 @@ func showAthletes(switched bool) {
 	imgui.InputTextWithHint("##athleteBirthdayInput", "День рождения", &uiState.athleteBirthdayInput, 0, nil)
 	imgui.SetNextItemWidth(avail.X / 4)
 	imgui.SameLine()
-	if imgui.BeginCombo("##athleteCountryInput", uiState.athleteCountryInput.Name) {
-		countries, _ := getCountries()
-		for _, c := range countries {
-			if (imgui.SelectableBool(c.Name)) {
-				uiState.athleteCountryInput = c
-				break
-			}
-		}
-		imgui.EndCombo()
-	}
+	pickCountry(&uiState.athleteCountryInput)
 	imgui.SetNextItemWidth(avail.X / 1)
 	imgui.SameLine()
 	if imgui.Button("Добавить") {
