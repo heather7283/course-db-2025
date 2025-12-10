@@ -149,6 +149,32 @@ func pickCountry(country *Country) {
 	}
 }
 
+func pickSite(site *Site) {
+	if imgui.BeginCombo("##pickSiteCombo", site.Name) {
+		defer imgui.EndCombo()
+		sites, _ := getSites()
+		for _, s := range sites {
+			if (imgui.SelectableBool(s.Name)) {
+				*site = s
+				return
+			}
+		}
+	}
+}
+
+func pickSport(sport *Sport) {
+	if imgui.BeginCombo("##pickSportCombo", sport.Name) {
+		defer imgui.EndCombo()
+		sports, _ := getSports()
+		for _, s := range sports {
+			if (imgui.SelectableBool(s.Name)) {
+				*sport = s
+				return
+			}
+		}
+	}
+}
+
 func showAthletes(switched bool) {
 	if switched {
 		uiState.athletesList, _ = getAthletes()
